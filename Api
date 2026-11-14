@@ -1,9 +1,0 @@
-
-curl -X DELETE \
-  -H "Authorization: token YOUR_GITHUB_TOKEN" \
-  -H "Accept: application/vnd.github+json" \
-  https://api.github.com/repos/hafidlaskri8871-hub/Archives-prince/contents/Api \
-  -d '{
-    "message": "Delete Api file",
-    "sha": "8b137891791fe96927ad78e64b0aad7bded08bdc"
-  }'
