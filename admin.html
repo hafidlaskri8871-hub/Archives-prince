@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>لوحة الإدارة - PRINCE ARCHIVE AI</title>
+<style>
+  :root{
+    --bg:#0b0b0d; --surface:#15151a; --surface2:#1d1d24; --border:#2a2a33;
+    --gold:#d4af37; --text:#f2f2f0; --muted:#9a9aa5; --ok:#3ecf8e; --bad:#e5533d;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:"IBM Plex Sans Arabic","Segoe UI",system-ui,sans-serif;
+    padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  header{padding:20px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap}
+  header h1{font-size:18px; margin:0; color:var(--gold)}
+  header small{color:var(--muted); display:block; margin-top:4px}
+  main{max-width:900px; margin:0 auto; padding:16px}
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px; margin-bottom:16px}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px}
+  .stat{background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:14px; text-align:center}
+  .stat b{display:block; font-size:26px; color:var(--gold)}
+  .stat span{color:var(--muted); font-size:12.5px}
+  label{display:block; font-size:13px; color:var(--muted); margin:10px 0 4px}
+  input{width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface2); color:var(--text); font-size:15px}
+  button{margin-top:14px; width:100%; padding:11px; border-radius:10px; border:0; background:var(--gold); color:#1a1a1a; font-weight:700; font-size:15px; cursor:pointer}
+  button.secondary{background:var(--surface2); color:var(--text); border:1px solid var(--border)}
+  .err{color:var(--bad); font-size:13.5px; margin-top:8px}
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin-top:8px}
+  th,td{padding:8px 6px; border-bottom:1px solid var(--border); text-align:right}
+  th{color:var(--muted); font-weight:600}
+  .pill{display:inline-block; padding:2px 9px; border-radius:999px; font-size:11.5px; font-weight:700}
+  .pill.ok{background:rgba(62,207,142,.15); color:var(--ok)}
+  .pill.bad{background:rgba(229,83,61,.15); color:var(--bad)}
+  .muted{color:var(--muted)}
+  .row{display:flex; justify-content:space-between; align-items:center; gap:8px}
+  #logoutBtn{width:auto; padding:8px 16px; margin:0}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>لوحة الإدارة</h1>
+    <small>PRINCE ARCHIVE AI — بيانات حقيقية من متصفحك (localStorage)</small>
+  </div>
+  <button id="logoutBtn" class="secondary" style="display:none">خروج</button>
+</header>
+<main>
+  <div id="loginView" class="card">
+    <p class="muted" style="margin-top:0">سجّل الدخول بحسابك على الموقع (يجب أن يكون موثّقًا verified).</p>
+    <label>البريد الإلكتروني</label>
+    <input id="loginEmail" type="email" autocomplete="username">
+    <label>كلمة المرور</label>
+    <input id="loginPass" type="password" autocomplete="current-password">
+    <button id="loginBtn">دخول</button>
+    <div id="loginErr" class="err"></div>
+  </div>
+
+  <div id="claimView" class="card" style="display:none">
+    <p>لا يوجد أي حساب مشرف (admin) على هذا الموقع بعد.</p>
+    <p class="muted">إذا كنت صاحب الموقع، اضغط الزر التالي لتصبح المشرف الأول — هذا الخيار يختفي تلقائيًا بمجرد وجود مشرف واحد.</p>
+    <button id="claimBtn">أصبح مشرفًا الآن</button>
+  </div>
+
+  <div id="dashView" style="display:none">
+    <div class="card">
+      <div class="grid" id="statsGrid"></div>
+    </div>
+    <div class="card">
+      <div class="row"><strong>صحة مصدر Gallica (فحص حي)</strong><span id="healthPill" class="pill">جارٍ الفحص...</span></div>
+    </div>
+    <div class="card">
+      <strong>المستخدمون (<span id="usersCount">0</span>)</strong>
+      <div style="overflow-x:auto"><table id="usersTable"><thead><tr><th>الاسم</th><th>البريد</th><th>الدولة</th><th>موثّق</th><th>الدور</th></tr></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card">
+      <strong>آخر عمليات البحث (<span id="logsCount">0</span>)</strong>
+      <div style="overflow-x:auto"><table id="logsTable"><thead><tr><th>الاستعلام</th><th>المستخدم</th><th>التاريخ</th></tr></thead><tbody></tbody></table></div>
+    </div>
+  </div>
+</main>
+
+<script>
+(function(){
+  "use strict";
+  function ju(e){ return btoa(e + "::PRINCE_SALT_2025"); }
+  function get(col){ try{ var r = localStorage.getItem("prince_"+col); return r? JSON.parse(r): []; }catch(e){ return []; } }
+  function set(col, arr){ try{ localStorage.setItem("prince_"+col, JSON.stringify(arr)); }catch(e){} }
+
+  var loginView = document.getElementById("loginView");
+  var claimView = document.getElementById("claimView");
+  var dashView = document.getElementById("dashView");
+  var logoutBtn = document.getElementById("logoutBtn");
+  var SESSION_KEY = "prince_admin_session_email";
+
+  function findUserByEmail(email){
+    var users = get("users");
+    for (var i=0;i<users.length;i++){
+      if (users[i].value && users[i].value.email === email) return users[i];
+    }
+    return null;
+  }
+
+  function anyAdminExists(){
+    return get("users").some(function(u){ return u.value && u.value.role === "admin"; });
+  }
+
+  function showLogin(err){
+    loginView.style.display = "block";
+    claimView.style.display = "none";
+    dashView.style.display = "none";
+    logoutBtn.style.display = "none";
+    document.getElementById("loginErr").textContent = err || "";
+  }
+
+  function showClaim(){
+    loginView.style.display = "none";
+    claimView.style.display = "block";
+    dashView.style.display = "none";
+    logoutBtn.style.display = "inline-block";
+  }
+
+  function renderDashboard(){
+    loginView.style.display = "none";
+    claimView.style.display = "none";
+    dashView.style.display = "block";
+    logoutBtn.style.display = "inline-block";
+
+    var users = get("users").map(function(u){ return u.value; });
+    var logs = get("search_logs").map(function(l){ return l.value; });
+    var bookmarks = get("bookmarks");
+    var tree = get("familyTree");
+    var alerts = get("jorf_alerts");
+    var posts = get("community_posts");
+    var donations = get("donations");
+
+    var stats = [
+      { n: users.length, l: "مستخدمون" },
+      { n: users.filter(function(u){return u.verified;}).length, l: "موثّقون" },
+      { n: logs.length, l: "عمليات بحث" },
+      { n: bookmarks.length, l: "مفضلة" },
+      { n: tree.length, l: "شجرة عائلة" },
+      { n: alerts.length, l: "تنبيهات JORF" },
+      { n: posts.length, l: "منشورات مجتمع" },
+      { n: donations.length, l: "تبرعات مسجّلة" }
+    ];
+    var grid = document.getElementById("statsGrid");
+    grid.innerHTML = "";
+    stats.forEach(function(s){
+      var d = document.createElement("div");
+      d.className = "stat";
+      d.innerHTML = "<b>"+s.n+"</b><span>"+s.l+"</span>";
+      grid.appendChild(d);
+    });
+
+    document.getElementById("usersCount").textContent = users.length;
+    var ub = document.querySelector("#usersTable tbody");
+    ub.innerHTML = "";
+    users.slice().reverse().forEach(function(u){
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<td>"+(u.name||"")+"</td><td>"+(u.email||"")+"</td><td>"+(u.country||"")+"</td>" +
+        "<td>"+(u.verified ? '<span class="pill ok">نعم</span>' : '<span class="pill bad">لا</span>')+"</td>" +
+        "<td>"+(u.role||"user")+"</td>";
+      ub.appendChild(tr);
+    });
+
+    document.getElementById("logsCount").textContent = logs.length;
+    var lb = document.querySelector("#logsTable tbody");
+    lb.innerHTML = "";
+    logs.slice().reverse().slice(0,30).forEach(function(l){
+      var tr = document.createElement("tr");
+      var d = l.createdAt ? new Date(l.createdAt).toLocaleString("ar") : "";
+      tr.innerHTML = "<td>"+(l.query||"")+"</td><td>"+(l.user||"")+"</td><td class='muted'>"+d+"</td>";
+      lb.appendChild(tr);
+    });
+
+    // Live health check against the real Gallica proxy
+    var pill = document.getElementById("healthPill");
+    fetch("/api/gallica?q=test").then(function(r){
+      if (r.ok){ pill.textContent = "متصل ✓"; pill.className = "pill ok"; }
+      else { pill.textContent = "خطأ ("+r.status+")"; pill.className = "pill bad"; }
+    }).catch(function(){
+      pill.textContent = "غير متاح"; pill.className = "pill bad";
+    });
+  }
+
+  function afterAuth(email){
+    sessionStorage.setItem(SESSION_KEY, email);
+    var rec = findUserByEmail(email);
+    if (!rec) { showLogin("الحساب غير موجود."); return; }
+    if (rec.value.role === "admin") { renderDashboard(); return; }
+    if (!anyAdminExists()) { showClaim(); return; }
+    showLogin("هذا الحساب ليس مشرفًا، ولا يمكن المطالبة بالدور لوجود مشرف بالفعل.");
+  }
+
+  document.getElementById("loginBtn").onclick = function(){
+    var email = document.getElementById("loginEmail").value.trim().toLowerCase();
+    var pass = document.getElementById("loginPass").value;
+    var rec = findUserByEmail(email);
+    if (!rec || rec.value.passwordHash !== ju(pass)) {
+      showLogin("بيانات الدخول غير صحيحة.");
+      return;
+    }
+    if (!rec.value.verified) {
+      showLogin("يجب توثيق البريد الإلكتروني أولاً من الموقع الرئيسي.");
+      return;
+    }
+    afterAuth(email);
+  };
+
+  document.getElementById("claimBtn").onclick = function(){
+    var email = sessionStorage.getItem(SESSION_KEY);
+    var rec = findUserByEmail(email);
+    if (!rec) { showLogin(); return; }
+    var users = get("users");
+    var idx = users.findIndex(function(u){ return u.id === rec.id; });
+    if (idx >= 0) {
+      users[idx].value.role = "admin";
+      set("users", users);
+      renderDashboard();
+    }
+  };
+
+  logoutBtn.onclick = function(){
+    sessionStorage.removeItem(SESSION_KEY);
+    showLogin();
+  };
+
+  // Resume session if already authenticated this browser session
+  var existing = sessionStorage.getItem(SESSION_KEY);
+  if (existing) { afterAuth(existing); } else { showLogin(); }
+})();
+</script>
+</body>
+</html>
